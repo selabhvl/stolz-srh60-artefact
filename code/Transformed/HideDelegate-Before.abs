@@ -1,0 +1,105 @@
+// TODO properly add/remove w4 update to all calls
+
+module HideDelegate;
+
+import * from DeadlockChecking;
+
+interface ClientI {
+    Unit enquire(Rel w4, Bool rem);
+}
+
+interface PersonI {
+  DeptI getDept(Rel w4);
+}
+
+interface DeptI {
+  PersonI getManager(Rel w4);
+  Unit setManager(Rel w4, PersonI m);
+}
+
+class Person(CogId id, CogMap cogs, DeptI d) implements PersonI {
+  {  cogs.add(this,id); } 
+  
+  DeptI getDept(Rel w4) {
+    return d;
+  }
+}
+
+class Dept(CogId id, CogMap cogs) implements DeptI {
+  PersonI m;
+  {  cogs.add(this,id); } 
+
+  PersonI getManager(Rel w4) {
+    return m;
+  }
+  Unit setManager(Rel w4, PersonI p) {
+    m = p;
+  }
+}
+
+class Client(CogId id, CogMap cogs) implements ClientI {
+  {  cogs.add(this,id); } 
+
+  Unit enquire(Rel w4, Bool remote) {
+    DeptI d;
+    
+    if ( remote ) {
+      CogId fresh0 = cogs.fresh();
+      d = new Dept(fresh0, cogs);
+    } else {
+      d = new local Dept(id, cogs);
+    }
+    
+    CogId fresh1 = cogs.fresh();
+    PersonI m = new Person(fresh1, cogs, d);
+    
+    CogId fresh2 = cogs.fresh();
+    PersonI p = new Person(fresh2, cogs, d);
+
+    CogId dCogId = cogs.lookup(d);
+    w4 = add(w4,Pair(id,dCogId));
+    Bool cf = cyclefree(w4);
+    assert cf;
+
+    d.setManager(w4,m);
+    w4 = rem(w4,Pair(id,dCogId));
+    
+    /* Client -> Person; Client -> Department */
+    CogId pCogId = cogs.lookup(p);
+    w4 = add(w4,Pair(id,pCogId));
+    cf = cyclefree(w4);
+    assert cf;
+
+    d = p.getDept(w4);
+
+    w4 = rem(w4,Pair(id,pCogId));
+
+    dCogId = cogs.lookup(d);
+    w4 = add(w4,Pair(id,dCogId));
+    cf = cyclefree(w4);
+    assert cf;
+    
+    m = d.getManager(w4);
+
+    w4 = rem(w4,Pair(id,dCogId));
+
+  }
+}
+
+{
+  CogMap cogs = new CogMapper();
+  CogId id = cogs.fresh();
+  Rel w4 = set[];
+  
+  CogId fresh = cogs.fresh();
+  ClientI c = new Client(fresh, cogs);
+
+  CogId cCogId = cogs.lookup(c);
+  w4 = add(w4,Pair(id,cCogId));
+  Bool cf = cyclefree(w4);
+  assert cf;
+
+  c.enquire(set[],False);
+  w4 = rem(w4,Pair(id,cCogId));
+}
+

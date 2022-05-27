@@ -1,0 +1,184 @@
+module HideDelegate;
+
+type CogId = Int;
+
+interface ClientI {
+  Unit enquire(Rel w4, Bool rem);}
+
+interface PersonI {
+  DeptI getDept(Rel w4);
+  PersonI getManager(Rel w4);}
+
+interface DeptI {
+  PersonI getManager(Rel w4);
+  Unit setManager(Rel w4, PersonI m);}
+
+class Person(CogId id, CogMap cogs, DeptI d) implements PersonI {
+  
+  {
+    this.cogs.add(this, this.id);
+  }
+  
+  DeptI getDept(Rel w4){
+    return this.d;
+  }
+  PersonI getManager(Rel w4){
+    DeptI temp = this.getDept(w4);
+    CogId tempCogId = this.cogs.lookup(temp);
+    w4 = add(w4, Pair( this.id, tempCogId ));
+    Bool cf = cyclefree(w4);
+    assert cf;
+    return temp.getManager(w4);
+  }
+  }
+
+class Dept(CogId id, CogMap cogs) implements DeptI {
+  PersonI m;
+  {
+    this.cogs.add(this, this.id);
+  }
+  
+  PersonI getManager(Rel w4){
+    return this.m;
+  }
+  Unit setManager(Rel w4, PersonI p){
+    this.m = p;
+  }
+  }
+
+class Client(CogId id, CogMap cogs) implements ClientI {
+  
+  {
+    this.cogs.add(this, this.id);
+  }
+  
+  Unit enquire(Rel w4, Bool remote){
+    DeptI d;
+    if ( remote ){
+      CogId fresh0 = this.cogs.fresh();
+      d = new Dept(fresh0, this.cogs);
+    } else {
+      d = new local Dept(this.id, this.cogs);
+    }
+    CogId fresh1 = this.cogs.fresh();
+    PersonI m = new Person(fresh1, this.cogs, d);
+    CogId fresh2 = this.cogs.fresh();
+    PersonI p = new Person(fresh2, this.cogs, d);
+    CogId dCogId = this.cogs.lookup(d);
+    w4 = add(w4, Pair( this.id, dCogId ));
+    Bool cf = cyclefree(w4);
+    assert cf;
+    d.setManager(w4, m);
+    w4 = rem(w4, Pair( this.id, dCogId ));
+    CogId pCogId = this.cogs.lookup(p);
+    w4 = add(w4, Pair( this.id, pCogId ));
+    cf = cyclefree(w4);
+    assert cf;
+    m = p.getManager(w4);
+    w4 = rem(w4, Pair( this.id, pCogId ));
+  }
+  }
+
+interface CogMap {
+  [Atomic]Unit add(Object fromNew, Int i);
+  Int fresh();
+  Int lookup(Object o);}
+
+class CogMapper implements CogMap {
+  Int fresh = 0;
+  Map<Object, Int> m = map(Nil);
+  
+  [Atomic]Unit add(Object o, Int i){
+    this.m = put(this.m, o, i);
+  }
+  Int fresh(){
+    Int ret = this.fresh;
+    this.fresh = ( this.fresh + 1 );
+    return ret;
+  }
+  Int lookup(Object o){
+    return case lookup(this.m, o) {
+      Just( x ) => x;
+    };
+  }
+  }
+
+type Node = Int;
+
+type Rel = Set<Pair<Node, Node>>;
+
+type NodeSet = Set<Node>;
+
+type NodeList = List<Node>;
+
+type Edge = Pair<Node, Node>;
+
+def Rel add(Rel w4, Edge e) = 
+  (when ( fst(e) == snd(e) ) then w4 else insertElement(w4, e));
+
+def Rel rem(Rel w4, Edge e) = 
+  remove(w4, e);
+
+def Pair<NodeSet, NodeSet> extract(Rel w4) = 
+  extract_helper(w4, set(Nil), set(Nil));
+
+def Pair<NodeSet, NodeSet> extract_helper(Rel w4, NodeSet l, NodeSet r) = 
+  (when hasNext(w4) then case next(w4) {
+    Pair( w4subset, e ) => extract_helper(w4subset, insertElement(l, fst(e)), insertElement(r, snd(e)));
+  } else Pair( l, r ));
+
+def Pair<Rel, NodeSet> partition(Rel w4, Int n) = 
+  partition_helper(w4, n, set(Nil), set(Nil));
+
+def Pair<Rel, NodeSet> partition_helper(Rel w4, Int n, Rel no_nm, NodeSet m_in_nm) = 
+  (when hasNext(w4) then case next(w4) {
+    Pair( w4subset, e ) => (when ( fst(e) != n ) then partition_helper(w4subset, n, insertElement(no_nm, e), m_in_nm) else partition_helper(w4subset, n, no_nm, insertElement(m_in_nm, snd(e))));
+  } else Pair( no_nm, m_in_nm ));
+
+def NodeSet no_incoming(Rel w4) = 
+  case extract(w4) {
+    Pair( l, r ) => difference(l, r);
+  };
+
+def Bool has_incoming(Rel w4, Int n) = 
+  (when hasNext(w4) then case next(w4) {
+    Pair( w4subset, edge ) => ( ( snd(edge) == n ) || has_incoming(w4subset, n) );
+  } else False);
+
+def NodeSet update(Rel w4, NodeSet s, NodeSet m) = 
+  (when hasNext(m) then case next(m) {
+    Pair( msubset, e ) => (when has_incoming(w4, e) then update(w4, s, msubset) else update(w4, insertElement(s, e), msubset));
+  } else s);
+
+def Maybe<NodeList> toposort(Rel w4) = 
+  toposort_helper(w4, list(Nil), no_incoming(w4));
+
+def Maybe<NodeList> toposort_helper(Rel w4, NodeList sorted, NodeSet non_incoming) = 
+  (when emptySet(non_incoming) then (when emptySet(w4) then Just( sorted ) else Nothing) else let ( Node n ) = take(non_incoming) in case partition(w4, n) {
+    Pair( no_nm, m_in_nm ) => let ( NodeSet new_non_incoming ) = update(no_nm, remove(non_incoming, n), m_in_nm) in toposort_helper(no_nm, Cons( n, sorted ), new_non_incoming);
+  });
+
+def Bool cyclefree(Rel w4) = 
+  case toposort(w4) {
+    Nothing => False;
+    _ => True;
+  };
+
+
+
+
+{
+  CogMap cogs = new CogMapper();
+  CogId id = cogs.fresh();
+  Rel w4 = set(Nil);
+  CogId fresh = cogs.fresh();
+  ClientI c = new Client(fresh, cogs);
+  CogId cCogId = cogs.lookup(c);
+  w4 = add(w4, Pair( id, cCogId ));
+  Bool cf = cyclefree(w4);
+  assert cf;
+  c.enquire(set(Nil), False);
+  w4 = rem(w4, Pair( id, cCogId ));
+}
+
+

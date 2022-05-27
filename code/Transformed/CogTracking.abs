@@ -1,0 +1,30 @@
+module CogTracking;
+export *;
+
+interface CogMap {
+  [Atomic] Unit add(Object fromNew, Int i);
+  Int fresh();
+  Int lookup(Object o);
+}
+
+class CogMapper implements CogMap {
+  Int fresh = 0;
+  Map<Object,Int> m = map[];
+
+  [Atomic] Unit add(Object o, Int i) {
+    m = put(m,o,i);
+  }
+  
+  Int fresh() {
+    Int ret = fresh;
+    fresh = fresh + 1;
+    return ret;
+  }
+
+  // Rely on exception thrown in case of Nothing
+  Int lookup(Object o) {
+    return case lookup(m,o) {  Just(x) => x };
+  }
+}
+
+

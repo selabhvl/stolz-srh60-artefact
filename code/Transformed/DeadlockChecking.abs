@@ -1,0 +1,8 @@
+module DeadlockChecking;
+import * from CogTracking;
+export * from CogTracking;
+import * from WaitFor;
+export * from WaitFor;
+export *;
+
+type CogId = Int;
